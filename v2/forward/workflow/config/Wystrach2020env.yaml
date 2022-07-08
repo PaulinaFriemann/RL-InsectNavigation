@@ -1,0 +1,8 @@
+width: 23 # Melaphorus bagoti: minX -.565 maxX 1.62
+height: 60 # M. bagoti: minY -.179 maxY 5.768
+start: (11,1) # start at (1.1,-.1) # TODO how did I get this?
+#goals: [(10,50)] # (.4, 5.0) # TODO how did I get this?
+traps: [(x,26) for x in range(2,20)] # M.bagoti 10 cm wide, 2m long, 10cm deep with 20cm wide exit board
+trap_exits:
+  - ((5,26), (5,27))
+  - ((6,26), (6,27))

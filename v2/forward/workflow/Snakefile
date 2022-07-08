@@ -1,0 +1,142 @@
+from snakemake.utils import min_version
+min_version("6.0")
+
+
+configfile: "workflow/config/config.yaml"
+
+
+from functools import partial
+import pickle
+
+import mushroom_rl.algorithms.value as rl_value_algorithms
+from mushroom_rl.utils.parameters import Parameter
+import mushroom_rl.policy as policies
+
+from insect_rl.simulation import EnvironmentConfig
+
+
+def parse_settings(agent_settings):
+    # Policy
+    policy_param = Parameter(value=agent_settings['policy_settings']['param_value'])
+    pi = vars(policies)[agent_settings['policy_settings']['type']](policy_param)
+
+    learning_rate = Parameter(agent_settings['learning_rate']['value'])
+    algo = vars(rl_value_algorithms)[agent_settings['algorithm']]
+    return partial(algo, policy=pi, learning_rate=learning_rate)
+
+rule make_agent:
+    output:
+        "temp/agent.pickle"
+    run:
+        agent = parse_settings(config['agent_settings'])
+        with open(output[0], 'wb') as o:
+            pickle.dump(agent, o)
+
+
+def get_simulation_configs(wildcards):
+    return {
+        'wind': float(wildcards.wind),
+        'reward': float(wildcards.reward),
+        'trapcost': float(wildcards.trapcost)
+    }
+
+rule environment_config:
+    input:
+        os.path.abspath(f"{config['env_config']}"),
+        no_trap_data=f"../inverse/data-prep/{config['experiment']}/no-trap_interpolated.csv",
+        trap_data=f"../inverse/data-prep/{config['experiment']}/trap_interpolated.csv"
+    output:
+        "{experiment}/env.pickle"
+    script:
+        "scripts/read_config.py"
+
+
+# rule make_envc:
+#     input:
+#         rules.environment_config.output
+#     output:
+#         "{experiment}/r={reward}-c={trapcost}/w={wind}/envc.pickle"
+#     run:
+#         with open(input[0], 'rb') as config_file:
+#             config = pickle.load(config_file)
+#         settings = get_simulation_configs(wildcards)
+#         envc = EnvironmentConfig.from_kwargs(**(config | settings))
+#         #print(envc)
+#         with open(output[0], 'wb') as o:
+#             pickle.dump(envc, o)
+
+rule convert_data:
+    input:
+        f"../inverse/data-prep/{config['experiment']}/no-trap_interpolated.csv",
+        f"../inverse/data-prep/{config['experiment']}/trap_interpolated.csv",
+        env=rules.environment_config.output
+    output:
+        #no_trap_converted="{experiment}/r={reward}-c={trapcost}/w={wind}/data_no_trap_converted.csv",
+        #trap_converted="{experiment}/r={reward}-c={trapcost}/w={wind}/data_trap_converted.csv"
+        "{experiment}/r={reward}-c={trapcost}/w={wind}/Js_data_no_trap.png",
+        "{experiment}/r={reward}-c={trapcost}/w={wind}/Js_data_trap.png",
+        "{experiment}/r={reward}-c={trapcost}/w={wind}/nsteps_data.png"
+    script:
+        "scripts/convert_dataframe.py"
+
+
+rule experiment:
+    input:
+        agent=rules.make_agent.output,
+        env=rules.environment_config.output
+    output:
+        results="{experiment}/r={reward}-c={trapcost}/w={wind}/results.csv",
+        Qs="{experiment}/r={reward}-c={trapcost}/w={wind}/Qs.npy",
+        Vs="{experiment}/r={reward}-c={trapcost}/w={wind}/Vs.npy",
+        Js="{experiment}/r={reward}-c={trapcost}/w={wind}/Js.npy"
+    script:
+        "scripts/experiment.py"
+
+
+rule plot_J:
+    input:
+        results=rules.experiment.output.results,
+        Js=rules.experiment.output.Js
+    output:
+        "{experiment}/r={reward}-c={trapcost}/w={wind}/J.svg"
+    script:
+        "scripts/plotting/plots.py"
+
+
+rule plot_all_trajectories:
+    input:
+        results=rules.experiment.output.results,
+        env=rules.environment_config.output
+    output:
+        "{experiment}/r={reward}-c={trapcost}/w={wind}/trajectories_all.svg"
+    script:
+        "scripts/plotting/plots.py"
+
+rule plot_trajectories:
+    input:
+        results=rules.experiment.output.results,
+        env=rules.environment_config.output
+    output:
+        expand("{{experiment}}/r={{reward}}-c={{trapcost}}/w={{wind}}/trajectories_{ant}.svg", ant=range(config["ants"]))
+    script:
+        "scripts/plotting/plots.py"
+
+
+rule plot_steps:
+    input:
+        results=rules.experiment.output.results
+    output:
+        "{experiment}/r={reward}-c={trapcost}/w={wind}/nsteps_data.png"
+    script:
+        "scripts/plotting/plots.py"
+
+
+rule plot_td_errors:
+    input:
+        results=rules.experiment.output.results,
+        env=rules.environment_config.output
+    output:
+        "{experiment}/r={reward}-c={trapcost}/w={wind}/tds.svg",
+        "{experiment}/r={reward}-c={trapcost}/w={wind}/tds_q.svg",
+    script:
+        "scripts/plotting/plots.py"

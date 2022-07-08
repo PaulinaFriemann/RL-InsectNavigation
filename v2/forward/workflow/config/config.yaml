@@ -1,0 +1,35 @@
+experiment: "Wystrach2020"
+data: "../../data/rawdata/Melophorus_Individual_Data_Paths.csv"
+conditions:
+  no-trap: partial(operator.eq, 0)
+  trap: partial(operator.le, 1)
+
+env_config: "workflow/config/Wystrach2020env.yaml"
+
+actions: INTERCARDINALS
+
+# agent settings
+agent_settings:
+  algorithm: SARSA
+  learning_rate:
+    value: .2
+  policy_settings:
+    type: Boltzmann #EpsGreedy
+    param_value: 1.0
+
+
+simulation_settings:
+  rewards: 10
+  winds: 0.0
+  trapcosts: -100
+  discount_factor: 0.99
+
+iterations: 100
+ants: 1
+experimental_setup: [no-trap, trap]
+
+# visualization of trajectories
+viz:
+  trajectories: True
+  heatmaps: True
+  stylefile: "config/trajectory.mplstyle"

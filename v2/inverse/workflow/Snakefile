@@ -1,0 +1,61 @@
+from snakemake.utils import min_version
+min_version("6.0")
+
+
+configfile: "workflow/config/config.yaml"
+
+
+module data_prep:
+    snakefile:
+        "rules/data_preparation.smk"
+    config: config
+    prefix: "data-prep"
+
+use rule * from data_prep as data_prep_*
+
+module viz:
+    snakefile:
+        "rules/visualization.smk"
+    config: config
+    prefix: "viz"
+
+use rule * from viz as viz_*
+
+def get_exp_config():
+    return f"workflow/config/{config['experiment']}env.yaml"
+
+import os
+module inverseRL:
+    snakefile:
+        "rules/inverse_rl.smk"
+    config: config#f"workflow/config/{config['experiment']}env.yaml" #get_exp_config()#config["env_config"]
+    prefix: "irl"
+
+use rule * from inverseRL as inverseRL_*
+
+
+rule all:
+    input:
+        rules.data_prep_all.input
+    default_target: True
+import inspect
+
+
+def all_prefixes():
+    return [info_.prefix for m,info_ in workflow.modules.items()]
+
+
+rule clean:
+    params:
+        command  = 'rm -r ' + ' & rm -r '.join(all_prefixes())
+    shell: '{params.command}'
+
+
+rule make_figs:
+    input:
+        rules.viz_all.input
+
+
+rule IAVI:
+    input:
+        rules.inverseRL_all.input
